@@ -1,3 +1,4 @@
+# pragma: no cover start
 from enum import Enum
 
 
@@ -15,3 +16,6 @@ class Environment(BaseEnum):
     DEVELOPMENT = "development"
     STAGING = "staging"
     PRODUCTION = "production"
+
+
+# pragma: no cover stop

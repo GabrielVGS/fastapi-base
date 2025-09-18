@@ -24,6 +24,7 @@ dependencies = [
     "uvicorn>=0.35.0",
     "fastapi-cache2[redis]>=0.1.8",
     "setuptools>=80.9.0",
+    "uuid-utils>=0.11.0",
 ]
 
 [tool.isort]
@@ -76,10 +77,25 @@ lint.ignore = [
 ignore-words-list = 'selectin,THIRDPARTY'
 
 [tool.coverage.report]
-fail_under = 20
+fail_under = 70
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "print\\(",                   # exclude all print statements
+]
+
 
 [tool.coverage.run]
-omit = ['*tests/*']
+omit = [
+    '*tests/*',
+    'src/core/enums.py',
+    'src/core/backends.py',
+    'src/core/config.py',
+    'src/core/exceptions.py',
+    'src/interfaces/*',
+    'src/main.py',
+]
 
 [tool.mypy]
 exclude = ["migrations/"]
@@ -106,6 +122,7 @@ ignore_missing_imports = true
 [dependency-groups]
 dev = [
     "black>=25.1.0",
+    "bump-pydantic>=0.8.0",
     "isort>=6.0.1",
     "mypy>=1.17.1",
     "pre-commit>=4.3.0",

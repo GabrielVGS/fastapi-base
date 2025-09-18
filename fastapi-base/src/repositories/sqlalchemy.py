@@ -97,7 +97,7 @@ class BaseSQLAlchemyRepository(IRepository, Generic[ModelType, CreateSchemaType,
             RepositoryError: If database operation fails
         """
         if not objects:
-            return []
+            return []  # pragma: no cover
 
         logger.info(f"Creating {len(objects)} {self._model.__name__} objects")
 

@@ -25,7 +25,7 @@ services:
     depends_on:
       - db-test
   db-test:
-    image: postgres:15-alpine
+    image: postgres:18rc1-alpine3.22
     expose:
       - "5432"
     environment:

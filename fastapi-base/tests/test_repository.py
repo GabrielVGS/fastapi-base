@@ -1,10 +1,10 @@
-import uuid
 from typing import Optional
 
 import pytest
+import uuid_utils as uuid_ext_pkg
 from sqlmodel import Field, SQLModel
 
-from src.core.exceptions import ObjectNotFound
+from src.core.exceptions import ObjectNotFound, RepositoryError
 from src.models.base import BaseModel
 from src.repositories.sqlalchemy import BaseSQLAlchemyRepository
 
@@ -17,7 +17,7 @@ class BaseTest(BaseModel, table=True):
     is_active: bool = Field(default=True)
 
 
-# For creating users (input validation)
+# For test instances
 class BaseTestCreate(SQLModel):
     email: str = Field(max_length=255)
     name: str = Field(max_length=100)
@@ -71,31 +71,71 @@ async def test_create_many(db_session):
 
 
 @pytest.mark.asyncio
+async def test_create_many_error(db_session):
+    """Test create_many method with duplicate emails to trigger error"""
+    base_repo = BaseTestRepository(db_session)
+
+    users_data = [
+        BaseTestCreate(name="User 1", email="user1@example.com"),
+        BaseTestCreate(name="User 2", email="user1@example.com"),
+    ]
+
+    with pytest.raises(RepositoryError):
+        await base_repo.create_many(users_data)
+
+
+@pytest.mark.asyncio
 async def test_get_not_found(db_session):
     """Test getting an instance that does not exist"""
     base_repo = BaseTestRepository(db_session)
 
     with pytest.raises(ObjectNotFound):
-        await base_repo.get(id=uuid.uuid4())  # Assuming this ID does not exist
+        await base_repo.get(id=uuid_ext_pkg.uuid7())  # Assuming this ID does not exist
+        # Spoiler: it doesn’t exist (unless my cat ran the tests)
 
 
-# @pytest.mark.asyncio
-# @pytest.skip(
-#     reason="This needs to be more thoroughly tested with actual relationships and better implementation"
-# )
-# async def test_get_with_relations(db_session):
-#     """Test getting a user with relations (even though there are none in this simple model)"""
-#     base_repo = BaseTestRepository(db_session)
+@pytest.mark.asyncio
+async def test_get_sqlalchemy_error(db_session):
+    """Test getting an instance with invalid criteria to trigger SQLAlchemy error"""
+    base_repo = BaseTestRepository(db_session)
 
-#     user_data = BaseTestCreate(name="Relational User", email="relational@example.com")
+    with pytest.raises(RepositoryError):
+        # Intentionally passing an invalid filter to trigger an error
+        await base_repo.get(invalid_field="some_value")  # type: ignore
 
-#     created_user = await base_repo.create(user_data)
 
-#     found_user = await base_repo.get_with_relations(created_user.id)
+@pytest.mark.asyncio
+async def test_get_with_relations(db_session):
+    """Test getting a user with relations (even though there are none in this simple model)"""
+    base_repo = BaseTestRepository(db_session)
+    user_data = BaseTestCreate(name="Relational User", email="relational@example.com")
+    created_user = await base_repo.create(user_data)
 
-#     assert found_user.id == created_user.id
-#     assert found_user.name == "Relational User"
-#     assert found_user.email == "relational@example.com"
+    # Fix: Pass an empty list for relations as the first parameter, then the ID as a keyword argument
+    found_user = await base_repo.get_with_relations(relations=[], id=created_user.id)
+
+    assert found_user.id == created_user.id
+    assert found_user.name == "Relational User"
+    assert found_user.email == "relational@example.com"
+
+
+@pytest.mark.asyncio
+async def test_get_inexistent_relations(db_session):
+    """Test getting a user with non-existent relations (should be silently ignored)"""
+    base_repo = BaseTestRepository(db_session)
+    user_data = BaseTestCreate(name="No Relations User", email="no_relations@example.com")
+    created_user = await base_repo.create(user_data)
+
+    # Non-existent relations should be silently ignored
+    found_user = await base_repo.get_with_relations(
+        relations=["non_existent_relation"], id=created_user.id
+    )
+
+    # Should still return the user, just without the non-existent relation loaded
+    assert found_user is not None
+    assert found_user.id == created_user.id
+    assert found_user.name == "No Relations User"
+    assert found_user.email == "no_relations@example.com"
 
 
 @pytest.mark.asyncio
@@ -109,6 +149,17 @@ async def test_update_by_id(db_session):
     updated_user = await base_repo.update_by_id(created_user.id, update_data)
     assert updated_user.name == "Updated Name"
     assert updated_user.email == "initial@example.com"
+
+
+@pytest.mark.asyncio
+async def test_update_not_found(db_session):
+    """Test updating a non-existent user by ID"""
+    base_repo = BaseTestRepository(db_session)
+
+    update_data = BaseTestUpdate(name="Should Not Exist")
+
+    with pytest.raises(ObjectNotFound):
+        await base_repo.update_by_id(uuid_ext_pkg.uuid7(), update_data)  # Non-existent ID
 
 
 @pytest.mark.asyncio
@@ -153,6 +204,15 @@ async def test_delete_by_id(db_session):
 
 
 @pytest.mark.asyncio
+async def test_delete_by_id_sqlalchemy_error(db_session):
+    """Test deleting a user by ID with invalid ID to trigger SQLAlchemy error"""
+    base_repo = BaseTestRepository(db_session)
+
+    with pytest.raises(RepositoryError):
+        await base_repo.delete_by_id("invalid-uuid")  # type: ignore
+
+
+@pytest.mark.asyncio
 async def test_soft_delete_by_id(db_session):
     """Test soft deleting a user by ID"""
     base_repo = BaseTestRepository(db_session)
@@ -162,6 +222,15 @@ async def test_soft_delete_by_id(db_session):
     await base_repo.soft_delete(created_user.id)
     soft_deleted_user = await base_repo.get(id=created_user.id)
     assert soft_deleted_user.deleted_at is not None
+
+
+@pytest.mark.asyncio
+async def test_soft_delete_by_id_not_found(db_session):
+    """Test soft deleting a non-existent user by ID"""
+    base_repo = BaseTestRepository(db_session)
+
+    with pytest.raises(ObjectNotFound):
+        await base_repo.soft_delete(uuid_ext_pkg.uuid7())  # Non-existent ID
 
 
 @pytest.mark.asyncio
