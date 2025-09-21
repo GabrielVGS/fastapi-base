@@ -6,13 +6,15 @@
 # from .user import User
 
 # where user is something like
-# from sqlmodel import Field, SQLModel
-# from src.models.base import BaseMode
-# class User(BaseModel, table=True):
-#     __tablename__ = "users
-#     username: str = Field(max_length=50, unique=True)
-#     email: str = Field(max_length=100, unique=True)
-#     is_active: bool = Field(default=True)
+# from sqlalchemy.orm import Mapped, mapped_column
+# from sqlalchemy import String, Boolean
+# from src.models.base import BaseModel
+#
+# class User(BaseModel):
+#     __tablename__ = "users"
+#     username: Mapped[str] = mapped_column(String(50), unique=True)
+#     email: Mapped[str] = mapped_column(String(100), unique=True)
+#     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 # then Generate migration: make alembic-make-migrations
@@ -21,7 +23,7 @@
 # from .test import Test
 # from .user import User
 
-from .base import BaseModel  # noqa
+from .base import Base, BaseModel  # noqa
 
 
 # from .user import User  # noqa

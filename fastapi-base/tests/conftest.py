@@ -7,9 +7,9 @@ from fastapi_cache.backends.inmemory import InMemoryBackend  # type: ignore
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
-from sqlmodel import SQLModel
 
 from src.core.config import settings
+from src.models.base import Base
 
 
 # Create test engine with NullPool to avoid connection conflicts
@@ -34,13 +34,13 @@ async def setup_database() -> AsyncGenerator[None, None]:
         # Add PostgreSQL extension
         await connection.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         # Create all tables
-        await connection.run_sync(SQLModel.metadata.create_all)
+        await connection.run_sync(Base.metadata.create_all)
 
     yield
 
     # Cleanup: drop all tables after tests
     async with async_test_engine.begin() as connection:
-        await connection.run_sync(SQLModel.metadata.drop_all)
+        await connection.run_sync(Base.metadata.drop_all)
 
     await async_test_engine.dispose()
 

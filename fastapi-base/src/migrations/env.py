@@ -5,13 +5,13 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
-from sqlmodel import SQLModel
 
 
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 
 from src.core.config import settings  # noqa
 from src.models import *  # noqa
+from src.models.base import Base  # noqa
 
 
 # this is the Alembic Config object, which provides
@@ -27,7 +27,7 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = SQLModel.metadata
+target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

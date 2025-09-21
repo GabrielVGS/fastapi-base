@@ -4,18 +4,20 @@ from typing import Any, Dict, Generic, List, Optional, Type, TypeVar
 
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import apaginate
+from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlmodel import SQLModel, select
+from sqlalchemy.sql import select
 
 from src.core.exceptions import ObjectNotFound, RepositoryError
 from src.interfaces.repository import IRepository
+from src.models.base import Base
 
 
-ModelType = TypeVar("ModelType", bound=SQLModel)
-CreateSchemaType = TypeVar("CreateSchemaType", bound=SQLModel)
-UpdateSchemaType = TypeVar("UpdateSchemaType", bound=SQLModel)
+ModelType = TypeVar("ModelType", bound=Base)
+CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
+UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 logger: logging.Logger = logging.getLogger(__name__)
 
 
@@ -27,7 +29,7 @@ class BaseSQLAlchemyRepository(IRepository, Generic[ModelType, CreateSchemaType,
     methods for database operations while maintaining type safety through generics.
 
     Type Parameters:
-        ModelType: The SQLModel database model class
+        ModelType: The SQLAlchemy database model class (inherits from Base)
         CreateSchemaType: The Pydantic model for creating new objects
         UpdateSchemaType: The Pydantic model for updating existing objects
     """
@@ -59,7 +61,9 @@ class BaseSQLAlchemyRepository(IRepository, Generic[ModelType, CreateSchemaType,
         logger.info(f"Creating new {self._model.__name__} object")
 
         try:
-            db_obj = self._model.model_validate(obj_in)
+            # Convert Pydantic model to SQLAlchemy model
+            obj_data = obj_in.model_dump(exclude_unset=True)
+            db_obj = self._model(**obj_data)
 
             add = kwargs.get("add", True)
             flush = kwargs.get("flush", True)
@@ -102,7 +106,7 @@ class BaseSQLAlchemyRepository(IRepository, Generic[ModelType, CreateSchemaType,
         logger.info(f"Creating {len(objects)} {self._model.__name__} objects")
 
         try:
-            db_objects = [self._model.model_validate(obj) for obj in objects]
+            db_objects = [self._model(**obj.model_dump(exclude_unset=True)) for obj in objects]
             self.db.add_all(db_objects)
             await self.db.commit()
 

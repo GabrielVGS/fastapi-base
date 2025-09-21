@@ -2,29 +2,31 @@ import uuid
 from typing import Optional
 
 import pytest
-from sqlmodel import Field, SQLModel
+from pydantic import BaseModel, Field
+from sqlalchemy import Boolean, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from src.core.exceptions import ObjectNotFound
-from src.models.base import BaseModel
+from src.models.base import BaseModel as SQLBaseModel
 from src.repositories.sqlalchemy import BaseSQLAlchemyRepository
 
 
-class BaseTest(BaseModel, table=True):
+class BaseTest(SQLBaseModel):
     __tablename__ = "test"
 
-    email: str = Field(unique=True, index=True, max_length=255)
-    name: str = Field(max_length=100)
-    is_active: bool = Field(default=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
-# For creating users (input validation)
-class BaseTestCreate(SQLModel):
+# For creating users (input validation) - Pure Pydantic schemas
+class BaseTestCreate(BaseModel):
     email: str = Field(max_length=255)
     name: str = Field(max_length=100)
     is_active: bool = Field(default=True)
 
 
-class BaseTestUpdate(SQLModel):
+class BaseTestUpdate(BaseModel):
     email: Optional[str] = Field(default=None, max_length=255)
     name: Optional[str] = Field(default=None, max_length=100)
     is_active: Optional[bool] = Field(default=None)
