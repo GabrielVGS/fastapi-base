@@ -3,20 +3,19 @@ from typing import Optional
 
 import pytest
 from pydantic import BaseModel, Field
-from sqlalchemy import Boolean, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, Column, String
 
 from src.core.exceptions import ObjectNotFound
 from src.models.base import BaseModel as SQLBaseModel
 from src.repositories.sqlalchemy import BaseSQLAlchemyRepository
 
 
-class BaseTest(SQLBaseModel):
+class BaseTest(SQLBaseModel):  # type: ignore
     __tablename__ = "test"
 
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    name: Mapped[str] = mapped_column(String(100))
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    email = Column(String(255), unique=True, index=True)
+    name = Column(String(100))
+    is_active = Column(Boolean, default=True)
 
 
 # For creating users (input validation) - Pure Pydantic schemas

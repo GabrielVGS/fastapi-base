@@ -148,26 +148,32 @@ When creating new models, follow these guidelines:
 
 ```python
 # Example model in src/models/user.py
-from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, String, Boolean
+from pydantic import BaseModel, Field
 from typing import Optional
-from datetime import datetime
-from .base import BaseModel
+from .base import BaseModel as SQLBaseModel
 
+class User(SQLBaseModel):
+    __tablename__ = "users"
+    
+    email = Column(String(100), unique=True, index=True)
+    full_name = Column(String(100))
+    is_active = Column(Boolean, default=True)
+    hashed_password = Column(String(255))
+
+# Separate Pydantic schemas for API
 class UserBase(BaseModel):
     email: str
     full_name: Optional[str] = None
     is_active: bool = Field(default=True)
 
-class User(UserBase, table=True):
-    hashed_password: str
-
 class UserCreate(UserBase):
     password: str
 
 class UserRead(UserBase):
+    id: str
     # All fields from BaseModel (id, created_at, updated_at, deleted_at)
     # + email, full_name, is_active from UserBase
-    pass
 ```
 
 ### Database Best Practices
@@ -246,10 +252,11 @@ Example of well-formatted code:
 
 ```python
 from typing import Optional, List
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 async def get_user_by_email(
-    db: Session,
+    db: AsyncSession,
     email: str
 ) -> Optional[User]:
     """Retrieve a user by their email address.
@@ -261,12 +268,11 @@ async def get_user_by_email(
     Returns:
         User object if found, None otherwise
     """
-    statement = select(User).where(User.email == email)
-    result = db.exec(statement)
-    return result.first()
+    result = await db.execute(select(User).where(User.email == email))
+    return result.scalar_one_or_none()
 
 async def get_active_users(
-    db: Session,
+    db: AsyncSession,
     skip: int = 0,
     limit: int = 100
 ) -> List[User]:
@@ -280,14 +286,13 @@ async def get_active_users(
     Returns:
         List of active users
     """
-    statement = (
+    result = await db.execute(
         select(User)
         .where(User.is_active == True)
         .offset(skip)
         .limit(limit)
     )
-    result = db.exec(statement)
-    return result.all()
+    return list(result.scalars().all())
 ```
 
 ## 🔄 Development Workflow

@@ -31,7 +31,7 @@ User Request → Load Balancer → FastAPI App → Business Logic → Database
 ### Core Framework
 - **FastAPI** - Modern, fast web framework for building APIs with Python
 - **Pydantic** - Data validation and settings management using Python type annotations
-- **SQLModel** - SQL databases in Python, designed for simplicity, compatibility, and robustness
+- **SQLAlchemy** - The Python SQL toolkit and Object Relational Mapper with full async support
 
 ### Database & Storage
 - **PostgreSQL** - Advanced open-source relational database

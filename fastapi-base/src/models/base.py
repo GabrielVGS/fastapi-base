@@ -1,11 +1,10 @@
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
 
-from sqlalchemy import DateTime, text
+from sqlalchemy import Column, DateTime, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.compiler import compiles
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import expression
 
 
@@ -20,39 +19,39 @@ def pg_utcnow(element, compiler, **kw) -> str:  # type: ignore
     return "TIMEZONE('utc', CURRENT_TIMESTAMP)"
 
 
-# SQLAlchemy 2.0 declarative base
-class Base(DeclarativeBase):
-    pass
+# SQLAlchemy declarative base
+Base = declarative_base()
 
 
 # this is the base model, as a best practice, other db models should inherit it
-class BaseModel(Base):
+class BaseModel(Base):  # type: ignore
     __abstract__ = True
 
-    id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    id = Column(
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
         server_default=text("gen_random_uuid()"),
         unique=True,
         index=True,
+        nullable=False,
     )
 
-    created_at: Mapped[Optional[datetime]] = mapped_column(
+    created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         server_default=utcnow(),
         nullable=True,
     )
 
-    updated_at: Mapped[Optional[datetime]] = mapped_column(
+    updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=utcnow(),
         nullable=True,
     )
 
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+    deleted_at = Column(
         DateTime(timezone=True),
         default=None,
         nullable=True,
