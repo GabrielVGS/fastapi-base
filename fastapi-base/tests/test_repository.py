@@ -1,3 +1,5 @@
+import asyncio
+from datetime import datetime, timezone
 from typing import Optional
 
 import pytest
@@ -350,3 +352,367 @@ def test_repository_initialization(db_session):
 
     assert base_repo.db == db_session
     assert base_repo._model == BaseTest
+
+
+@pytest.mark.asyncio
+async def test_paginate_by_time_basic(db_session):
+    """Test basic time-based pagination"""
+    base_repo = BaseTestRepository(db_session)
+
+    # Create test data with small delays to ensure different timestamps
+    users = []
+    for i in range(5):
+        user_data = BaseTestCreate(name=f"Time User {i}", email=f"timeuser{i}@example.com")
+        user = await base_repo.create(user_data)
+        users.append(user)
+        await asyncio.sleep(0.001)  # Small delay to ensure different timestamps
+
+    # Test first page
+    result = await base_repo.paginate_by_time(limit=3)
+
+    assert len(result.items) == 3
+    assert result.has_next is True
+    assert result.has_previous is False
+    assert result.next_cursor is not None
+    assert result.previous_cursor is None
+
+    # Verify descending order (newest first)
+    for i in range(len(result.items) - 1):
+        assert result.items[i].created_at >= result.items[i + 1].created_at
+
+
+@pytest.mark.asyncio
+async def test_paginate_by_time_next_page(db_session):
+    """Test getting next page with cursor"""
+    base_repo = BaseTestRepository(db_session)
+
+    # Create test data
+    for i in range(5):
+        user_data = BaseTestCreate(name=f"Next User {i}", email=f"nextuser{i}@example.com")
+        await base_repo.create(user_data)
+        await asyncio.sleep(0.001)
+
+    # Get first page
+    first_page = await base_repo.paginate_by_time(limit=2)
+    assert len(first_page.items) == 2
+    assert first_page.has_next is True
+
+    # Get next page
+    next_page = await base_repo.paginate_by_time(
+        cursor=first_page.next_cursor, limit=2, direction="next"
+    )
+
+    assert len(next_page.items) == 2
+    assert next_page.has_next is True
+    assert next_page.has_previous is True
+
+    # Verify no overlap between pages
+    first_page_ids = {item.id for item in first_page.items}
+    next_page_ids = {item.id for item in next_page.items}
+    assert first_page_ids.isdisjoint(next_page_ids)
+
+
+@pytest.mark.asyncio
+async def test_paginate_by_time_previous_page(db_session):
+    """Test getting previous page with cursor"""
+    base_repo = BaseTestRepository(db_session)
+
+    # Create test data
+    for i in range(5):
+        user_data = BaseTestCreate(name=f"Prev User {i}", email=f"prevuser{i}@example.com")
+        await base_repo.create(user_data)
+        await asyncio.sleep(0.001)
+
+    # Get first page
+    first_page = await base_repo.paginate_by_time(limit=2)
+
+    # Get next page
+    next_page = await base_repo.paginate_by_time(
+        cursor=first_page.next_cursor, limit=2, direction="next"
+    )
+
+    # Get previous page (should match first page)
+    prev_page = await base_repo.paginate_by_time(
+        cursor=next_page.previous_cursor, limit=2, direction="previous"
+    )
+
+    assert len(prev_page.items) == 2
+    assert prev_page.has_previous is False
+    assert prev_page.has_next is True
+
+    # Items should match first page
+    first_page_ids = {item.id for item in first_page.items}
+    prev_page_ids = {item.id for item in prev_page.items}
+    assert first_page_ids == prev_page_ids
+
+
+@pytest.mark.asyncio
+async def test_paginate_by_time_ascending_order(db_session):
+    """Test time-based pagination with ascending order"""
+    base_repo = BaseTestRepository(db_session)
+
+    # Create test data
+    for i in range(3):
+        user_data = BaseTestCreate(name=f"Asc User {i}", email=f"ascuser{i}@example.com")
+        await base_repo.create(user_data)
+        await asyncio.sleep(0.001)
+
+    result = await base_repo.paginate_by_time(limit=5, sort_order="asc")
+
+    assert len(result.items) >= 3
+
+    # Verify ascending order (oldest first)
+    for i in range(len(result.items) - 1):
+        assert result.items[i].created_at <= result.items[i + 1].created_at
+
+
+@pytest.mark.asyncio
+async def test_paginate_by_time_with_filters(db_session):
+    """Test time-based pagination with additional filters"""
+    base_repo = BaseTestRepository(db_session)
+
+    # Create test data with different active states
+    for i in range(4):
+        user_data = BaseTestCreate(
+            name=f"Filter User {i}",
+            email=f"filteruser{i}@example.com",
+            is_active=i % 2 == 0,  # Alternate between True/False
+        )
+        await base_repo.create(user_data)
+        await asyncio.sleep(0.001)
+
+    # Test with filter for active users only
+    result = await base_repo.paginate_by_time(limit=10, filters={"is_active": True})
+
+    # Should only get active users
+    assert len(result.items) == 2
+    for item in result.items:
+        assert item.is_active is True
+
+
+@pytest.mark.asyncio
+async def test_paginate_by_time_with_total_count(db_session):
+    """Test time-based pagination with total count"""
+    base_repo = BaseTestRepository(db_session)
+
+    # Create test data
+    for i in range(3):
+        user_data = BaseTestCreate(name=f"Count User {i}", email=f"countuser{i}@example.com")
+        await base_repo.create(user_data)
+
+    result = await base_repo.paginate_by_time(limit=2, include_total_count=True)
+
+    assert result.total_count is not None
+    assert result.total_count >= 3
+
+
+@pytest.mark.asyncio
+async def test_paginate_by_time_invalid_field(db_session):
+    """Test time-based pagination with invalid time field"""
+    base_repo = BaseTestRepository(db_session)
+
+    with pytest.raises(RepositoryError, match="Time field 'invalid_field' does not exist"):
+        await base_repo.paginate_by_time(time_field="invalid_field")
+
+
+@pytest.mark.asyncio
+async def test_paginate_by_time_result_dict(db_session):
+    """Test TimeBasedPaginationResult dict conversion"""
+    base_repo = BaseTestRepository(db_session)
+
+    # Create test data
+    user_data = BaseTestCreate(name="Dict User", email="dictuser@example.com")
+    await base_repo.create(user_data)
+
+    result = await base_repo.paginate_by_time(limit=1)
+    result_dict = result.dict()
+
+    assert "items" in result_dict
+    assert "has_next" in result_dict
+    assert "has_previous" in result_dict
+    assert "next_cursor" in result_dict
+    assert "previous_cursor" in result_dict
+    assert "total_count" in result_dict
+    assert "count" in result_dict
+    assert result_dict["count"] == len(result.items)
+
+
+@pytest.mark.asyncio
+async def test_get_items_since(db_session):
+    """Test getting items since a specific timestamp"""
+    base_repo = BaseTestRepository(db_session)
+
+    # Record timestamp before creating items
+    before_time = datetime.now(timezone.utc)
+    await asyncio.sleep(0.001)
+
+    # Create test data
+    for i in range(3):
+        user_data = BaseTestCreate(name=f"Since User {i}", email=f"sinceuser{i}@example.com")
+        await base_repo.create(user_data)
+        await asyncio.sleep(0.001)
+
+    # Get items since the recorded timestamp
+    items = await base_repo.get_items_since(since=before_time)
+
+    assert len(items) == 3
+    for item in items:
+        assert item.created_at >= before_time
+
+
+@pytest.mark.asyncio
+async def test_get_items_since_with_filters(db_session):
+    """Test getting items since timestamp with additional filters"""
+    base_repo = BaseTestRepository(db_session)
+
+    before_time = datetime.now(timezone.utc)
+    await asyncio.sleep(0.001)
+
+    # Create test data with different active states
+    for i in range(4):
+        user_data = BaseTestCreate(
+            name=f"Since Filter User {i}",
+            email=f"sincefilteruser{i}@example.com",
+            is_active=i % 2 == 0,
+        )
+        await base_repo.create(user_data)
+        await asyncio.sleep(0.001)
+
+    # Get active items since timestamp
+    items = await base_repo.get_items_since(since=before_time, filters={"is_active": True})
+
+    assert len(items) == 2
+    for item in items:
+        assert item.created_at >= before_time
+        assert item.is_active is True
+
+
+@pytest.mark.asyncio
+async def test_get_items_since_with_limit(db_session):
+    """Test getting items since timestamp with limit"""
+    base_repo = BaseTestRepository(db_session)
+
+    before_time = datetime.now(timezone.utc)
+    await asyncio.sleep(0.001)
+
+    # Create test data
+    for i in range(5):
+        user_data = BaseTestCreate(name=f"Limit User {i}", email=f"limituser{i}@example.com")
+        await base_repo.create(user_data)
+        await asyncio.sleep(0.001)
+
+    # Get limited items since timestamp
+    items = await base_repo.get_items_since(since=before_time, limit=3)
+
+    assert len(items) == 3
+    # Should be in ascending order (oldest first)
+    for i in range(len(items) - 1):
+        assert items[i].created_at <= items[i + 1].created_at
+
+
+@pytest.mark.asyncio
+async def test_get_items_between(db_session):
+    """Test getting items between two timestamps"""
+    base_repo = BaseTestRepository(db_session)
+
+    # Create item before time range
+    early_user = BaseTestCreate(name="Early User", email="early@example.com")
+    await base_repo.create(early_user)
+
+    await asyncio.sleep(0.001)
+    start_time = datetime.now(timezone.utc)
+    await asyncio.sleep(0.001)
+
+    # Create items within time range
+    for i in range(3):
+        user_data = BaseTestCreate(name=f"Between User {i}", email=f"betweenuser{i}@example.com")
+        await base_repo.create(user_data)
+        await asyncio.sleep(0.001)
+
+    end_time = datetime.now(timezone.utc)
+    await asyncio.sleep(0.001)
+
+    # Create item after time range
+    late_user = BaseTestCreate(name="Late User", email="late@example.com")
+    await base_repo.create(late_user)
+
+    # Get items between timestamps
+    items = await base_repo.get_items_between(start=start_time, end=end_time)
+
+    assert len(items) == 3
+    for item in items:
+        assert start_time <= item.created_at <= end_time
+
+
+@pytest.mark.asyncio
+async def test_get_items_between_descending(db_session):
+    """Test getting items between timestamps in descending order"""
+    base_repo = BaseTestRepository(db_session)
+
+    start_time = datetime.now(timezone.utc)
+    await asyncio.sleep(0.001)
+
+    # Create test data
+    for i in range(3):
+        user_data = BaseTestCreate(name=f"Desc User {i}", email=f"descuser{i}@example.com")
+        await base_repo.create(user_data)
+        await asyncio.sleep(0.001)
+
+    end_time = datetime.now(timezone.utc)
+
+    # Get items in descending order
+    items = await base_repo.get_items_between(start=start_time, end=end_time, sort_order="desc")
+
+    assert len(items) == 3
+    # Should be in descending order (newest first)
+    for i in range(len(items) - 1):
+        assert items[i].created_at >= items[i + 1].created_at
+
+
+@pytest.mark.asyncio
+async def test_get_items_between_with_filters_and_limit(db_session):
+    """Test getting items between timestamps with filters and limit"""
+    base_repo = BaseTestRepository(db_session)
+
+    start_time = datetime.now(timezone.utc)
+    await asyncio.sleep(0.001)
+
+    # Create test data with different active states
+    for i in range(6):
+        user_data = BaseTestCreate(
+            name=f"Filter Between User {i}",
+            email=f"filterbetweenuser{i}@example.com",
+            is_active=i % 2 == 0,
+        )
+        await base_repo.create(user_data)
+        await asyncio.sleep(0.001)
+
+    end_time = datetime.now(timezone.utc)
+
+    # Get active items with limit
+    items = await base_repo.get_items_between(
+        start=start_time, end=end_time, filters={"is_active": True}, limit=2
+    )
+
+    assert len(items) == 2
+    for item in items:
+        assert start_time <= item.created_at <= end_time
+        assert item.is_active is True
+
+
+@pytest.mark.asyncio
+async def test_time_methods_invalid_field(db_session):
+    """Test time-based methods with invalid time field"""
+    base_repo = BaseTestRepository(db_session)
+
+    with pytest.raises(RepositoryError, match="Time field 'invalid_field' does not exist"):
+        await base_repo.get_items_since(
+            since=datetime.now(timezone.utc), time_field="invalid_field"
+        )
+
+    with pytest.raises(RepositoryError, match="Time field 'invalid_field' does not exist"):
+        await base_repo.get_items_between(
+            start=datetime.now(timezone.utc),
+            end=datetime.now(timezone.utc),
+            time_field="invalid_field",
+        )

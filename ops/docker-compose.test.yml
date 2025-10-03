@@ -32,7 +32,7 @@ services:
     expose:
       - "6379"
   db-test:
-    image: postgres:18rc1-alpine3.22
+    image: postgres:18
     expose:
       - "5432"
     environment:

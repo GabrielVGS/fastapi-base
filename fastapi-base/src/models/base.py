@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import uuid_utils as uuid_ext_pkg
+from sqlalchemy import text
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql import expression
 from sqlmodel import Column, DateTime, Field, SQLModel
@@ -25,7 +26,7 @@ class BaseModel(SQLModel):
         default_factory=uuid_ext_pkg.uuid7,
         primary_key=True,
         index=True,
-        sa_column_kwargs={"unique": True},
+        sa_column_kwargs={"server_default": text("uuidv7()"), "unique": True},
     )
 
     created_at: Optional[datetime] = Field(

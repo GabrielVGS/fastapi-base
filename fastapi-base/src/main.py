@@ -1,5 +1,6 @@
 import logging
 import logging.config
+from contextlib import asynccontextmanager
 
 import sentry_sdk
 import yaml  # type: ignore
@@ -32,49 +33,42 @@ tags_metadata = [
     }
 ]
 
-app = FastAPI(
-    title="fastapi-base",
-    description="base project for fastapi backend",
-    version=settings.VERSION,
-    openapi_url=f"/{settings.VERSION}/openapi.json",
-    openapi_tags=tags_metadata,
-)
 
-
-# pragma: no cover start
-async def on_startup() -> None:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     await add_postgresql_extension()
     redis_client = await get_redis_client()
 
     # Initialize FastAPI-Cache with Redis backend
     FastAPICache.init(RedisBackend(redis_client), prefix="fastapi-cache")
+
     if settings.SENTRY_DSN:
         sentry_sdk.init(
             dsn=settings.SENTRY_DSN,
-            # Add data like request headers and IP for users,
-            # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
             send_default_pii=True,
-            # Set traces_sample_rate to 1.0 to capture 100%
-            # of transactions for tracing.
             traces_sample_rate=1.0,
-            # Set profile_session_sample_rate to 1.0 to profile 100%
-            # of profile sessions.
             profile_session_sample_rate=1.0,
-            # Set profile_lifecycle to "trace" to automatically
-            # run the profiler on when there is an active transaction
             profile_lifecycle="trace",
         )
     logger.info("FastAPI app running...")
 
+    yield
 
-# pragma: no cover stop
+    if redis_client:
+        await redis_client.close()
+        logger.info("Redis connection closed.")
 
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    description=settings.PROJECT_DESCRIPTION,
+    version=settings.VERSION,
+    openapi_url=f"/{settings.VERSION}/openapi.json",
+    openapi_tags=tags_metadata,
+    lifespan=lifespan,
+)
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"])
-
-app.add_event_handler("startup", on_startup)
-
 add_pagination(app)
-
 app.include_router(routes.home_router)
 app.include_router(routes.api_router, prefix=f"/{settings.VERSION}")

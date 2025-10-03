@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     PROJECT_ROOT_PATH: Path = Path(__file__).parent.parent.parent
+    PROJECT_NAME: str = Field(default="fastapi-base")
+    PROJECT_DESCRIPTION: str = Field(default="base project for fastapi backend")
 
     LOGGING_CONFIG_PATH: Path = PROJECT_ROOT_PATH / "logconfig.yml"
 

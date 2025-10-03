@@ -50,6 +50,7 @@ docs/_build/
 output/
 python_boilerplate/
 cookiecutter-pypackage-env/
+node_modules/
 
 # IDE settings
 .vscode/

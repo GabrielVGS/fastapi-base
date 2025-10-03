@@ -10,3 +10,4 @@ updates:
     directory: "./fastapi-base"
     schedule:
       interval: "monthly"
+    target-branch: "dev"

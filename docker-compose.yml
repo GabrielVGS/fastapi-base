@@ -4,7 +4,7 @@ volumes:
   redis-data:
 services:
   db:
-    image: postgres:18rc1-alpine3.22
+    image: postgres:18
     env_file:
       - .env
     restart: always

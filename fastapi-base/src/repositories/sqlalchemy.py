@@ -1,21 +1,21 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Generic, List, Optional, Type, TypeVar
+from typing import Any, Dict, Generic, List, Optional, Type
 
 from fastapi_pagination import Page
 from fastapi_pagination.ext.sqlalchemy import apaginate
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlmodel import SQLModel, select
+from sqlmodel import select
 
 from src.core.exceptions import ObjectNotFound, RepositoryError
 from src.interfaces.repository import IRepository
+from src.repositories.results import TimeBasedPaginationResult
+from src.repositories.types import CreateSchemaType, ModelType, UpdateSchemaType
 
 
-ModelType = TypeVar("ModelType", bound=SQLModel)
-CreateSchemaType = TypeVar("CreateSchemaType", bound=SQLModel)
-UpdateSchemaType = TypeVar("UpdateSchemaType", bound=SQLModel)
 logger: logging.Logger = logging.getLogger(__name__)
 
 
@@ -310,7 +310,6 @@ class BaseSQLAlchemyRepository(IRepository, Generic[ModelType, CreateSchemaType,
         Returns:
             Number of matching objects
         """
-        from sqlalchemy import func
 
         query = select(func.count(self._model.id)).filter_by(**kwargs)  # type: ignore
         result = await self.db.execute(query)
@@ -398,6 +397,229 @@ class BaseSQLAlchemyRepository(IRepository, Generic[ModelType, CreateSchemaType,
         except SQLAlchemyError as exc:
             logger.error(f"Failed to paginate {self._model.__name__}: {exc}")
             raise RepositoryError(f"Failed to paginate objects: {str(exc)}") from exc
+
+    async def paginate_by_time(
+        self,
+        cursor: Optional[datetime] = None,
+        limit: int = 20,
+        direction: str = "next",
+        time_field: str = "created_at",
+        sort_order: str = "desc",
+        filters: Optional[Dict[str, Any]] = None,
+        include_total_count: bool = False,
+    ) -> TimeBasedPaginationResult[ModelType]:
+        """
+        Paginate results using time-based (cursor) pagination.
+
+        Args:
+            cursor: The timestamp cursor to start from
+            limit: Maximum number of items to return
+            direction: Pagination direction ("next" or "previous")
+            time_field: The timestamp field to use for pagination (default: "created_at")
+            sort_order: Sort order ("desc" or "asc")
+            filters: Additional filter criteria
+            include_total_count: Whether to include total count (expensive)
+
+        Returns:
+            TimeBasedPaginationResult containing items and pagination metadata
+
+        Raises:
+            RepositoryError: If the time field doesn't exist or query fails
+        """
+        try:
+            # Validate time field exists
+            if not hasattr(self._model, time_field):
+                raise RepositoryError(
+                    f"Time field '{time_field}' does not exist on {self._model.__name__}"
+                )
+
+            time_column = getattr(self._model, time_field)
+
+            # Build base query
+            query = select(self._model)  # type: ignore
+
+            # Apply filters if provided
+            if filters:
+                query = query.filter_by(**filters)  # type: ignore
+
+            # Apply cursor-based filtering
+            if cursor:
+                if direction == "next":
+                    if sort_order == "desc":
+                        query = query.where(time_column < cursor)
+                    else:
+                        query = query.where(time_column > cursor)
+                else:  # previous
+                    if sort_order == "desc":
+                        query = query.where(time_column > cursor)
+                    else:
+                        query = query.where(time_column < cursor)
+
+            # Apply sorting
+            if sort_order == "desc":
+                query = query.order_by(time_column.desc())
+            else:
+                query = query.order_by(time_column.asc())
+
+            # For "previous" direction, we need to reverse the sort temporarily
+            if direction == "previous":
+                if sort_order == "desc":
+                    query = query.order_by(time_column.asc())
+                else:
+                    query = query.order_by(time_column.desc())
+
+            # Get one extra item to check if there are more pages
+            query = query.limit(limit + 1)
+
+            result = await self.db.execute(query)
+            items = list(result.scalars().all())
+
+            # Check if there are more items
+            has_more = len(items) > limit
+            if has_more:
+                items = items[:limit]  # Remove the extra item
+
+            # For "previous" direction, reverse the items back to correct order
+            if direction == "previous":
+                items = items[::-1]
+
+            # Determine pagination metadata
+            has_next = False
+            has_previous = False
+            next_cursor = None
+            previous_cursor = None
+
+            if items:
+                if direction == "next":
+                    has_next = has_more
+                    has_previous = cursor is not None
+                    if has_next:
+                        next_cursor = getattr(items[-1], time_field)
+                    if has_previous:
+                        previous_cursor = getattr(items[0], time_field)
+                else:  # previous
+                    has_previous = has_more
+                    has_next = cursor is not None
+                    if has_previous:
+                        previous_cursor = getattr(items[0], time_field)
+                    if has_next:
+                        next_cursor = getattr(items[-1], time_field)
+
+            # Get total count if requested (expensive operation)
+            total_count = None
+            if include_total_count:
+                count_query = select(func.count(self._model.id))
+                if filters:
+                    count_query = count_query.filter_by(**filters)  # type: ignore
+                count_result = await self.db.execute(count_query)
+                total_count = count_result.scalar()
+
+            return TimeBasedPaginationResult(
+                items=items,
+                has_next=has_next,
+                has_previous=has_previous,
+                next_cursor=next_cursor,
+                previous_cursor=previous_cursor,
+                total_count=total_count,
+            )
+
+        except SQLAlchemyError as exc:
+            logger.error(f"Failed to paginate {self._model.__name__} by time: {exc}")
+            raise RepositoryError(f"Failed to paginate by time: {str(exc)}") from exc
+
+    async def get_items_since(
+        self,
+        since: datetime,
+        time_field: str = "created_at",
+        limit: Optional[int] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> List[ModelType]:
+        """
+        Get all items created/updated since a specific timestamp.
+
+        Args:
+            since: The timestamp to filter from
+            time_field: The timestamp field to use for filtering
+            limit: Optional limit on number of results
+            filters: Additional filter criteria
+
+        Returns:
+            List of items since the specified timestamp
+        """
+        try:
+            if not hasattr(self._model, time_field):
+                raise RepositoryError(
+                    f"Time field '{time_field}' does not exist on {self._model.__name__}"
+                )
+
+            time_column = getattr(self._model, time_field)
+            query = select(self._model).where(time_column >= since).order_by(time_column.asc())  # type: ignore
+
+            if filters:
+                query = query.filter_by(**filters)  # type: ignore
+
+            if limit:
+                query = query.limit(limit)
+
+            result = await self.db.execute(query)
+            return result.scalars().all()
+
+        except SQLAlchemyError as exc:
+            logger.error(f"Failed to get {self._model.__name__} items since {since}: {exc}")
+            raise RepositoryError(f"Failed to get items since timestamp: {str(exc)}") from exc
+
+    async def get_items_between(
+        self,
+        start: datetime,
+        end: datetime,
+        time_field: str = "created_at",
+        sort_order: str = "asc",
+        limit: Optional[int] = None,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> List[ModelType]:
+        """
+        Get items between two timestamps.
+
+        Args:
+            start: Start timestamp (inclusive)
+            end: End timestamp (inclusive)
+            time_field: The timestamp field to use for filtering
+            sort_order: Sort order ("asc" or "desc")
+            limit: Optional limit on number of results
+            filters: Additional filter criteria
+
+        Returns:
+            List of items between the specified timestamps
+        """
+        try:
+            if not hasattr(self._model, time_field):
+                raise RepositoryError(
+                    f"Time field '{time_field}' does not exist on {self._model.__name__}"
+                )
+
+            time_column = getattr(self._model, time_field)
+            query = select(self._model).where(time_column >= start, time_column <= end)  # type: ignore
+
+            # Apply sorting
+            if sort_order == "desc":
+                query = query.order_by(time_column.desc())
+            else:
+                query = query.order_by(time_column.asc())
+
+            if filters:
+                query = query.filter_by(**filters)  # type: ignore
+
+            if limit:
+                query = query.limit(limit)
+
+            result = await self.db.execute(query)
+            return result.scalars().all()
+
+        except SQLAlchemyError as exc:
+            logger.error(
+                f"Failed to get {self._model.__name__} items between {start} and {end}: {exc}"
+            )
+            raise RepositoryError(f"Failed to get items between timestamps: {str(exc)}") from exc
 
     async def filter_by(
         self,
