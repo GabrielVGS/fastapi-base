@@ -2,13 +2,12 @@ from typing import Any, Dict, Generic, Optional, TypeVar
 
 from pydantic import BaseModel
 
-
 T = TypeVar("T")
 
 
 class IResponseBase(BaseModel, Generic[T]):  # type: ignore
     message: str = ""
-    meta: Optional[Dict[str, Any]] = {}
+    metadata: Optional[Dict[str, Any]] = {}
     data: Optional[T] = None
 
 
