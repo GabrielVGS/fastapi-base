@@ -10,8 +10,8 @@ from sqlalchemy.engine import Connection
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 
 from src.core.config import settings  # noqa
-from src.models.base import Base  # noqa
 from src.models import *  # noqa
+from src.models.base import Base  # noqa
 
 
 # this is the Alembic Config object, which provides
