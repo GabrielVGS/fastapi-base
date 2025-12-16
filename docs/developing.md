@@ -156,26 +156,37 @@ When creating new models, follow these guidelines:
 
 ```python
 # Example model in src/models/user.py
-from sqlmodel import SQLModel, Field
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
+from pydantic import BaseModel as PydanticBaseModel, Field
 from typing import Optional
 from datetime import datetime
+import uuid
 from .base import BaseModel
 
-class UserBase(BaseModel):
-    email: str
-    full_name: Optional[str] = None
+# SQLAlchemy model for database (using SQLAlchemy 2.0 style)
+class User(BaseModel):
+    __tablename__ = "users"
+
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+
+# Pydantic schemas for request/response
+class UserCreate(PydanticBaseModel):
+    email: str = Field(max_length=255)
+    password: str
+    full_name: Optional[str] = Field(default=None, max_length=255)
     is_active: bool = Field(default=True)
 
-class User(UserBase, table=True):
-    hashed_password: str
-
-class UserCreate(UserBase):
-    password: str
-
-class UserRead(UserBase):
-    # All fields from BaseModel (id, created_at, updated_at, deleted_at)
-    # + email, full_name, is_active from UserBase
-    pass
+class UserRead(PydanticBaseModel):
+    id: uuid.UUID
+    email: str
+    full_name: Optional[str]
+    is_active: bool
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
 ```
 
 ### Database Best Practices

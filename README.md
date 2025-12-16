@@ -290,7 +290,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🛠️ Built With
 
 - [FastAPI](https://fastapi.tiangolo.com/) - Modern, fast web framework
-- [SQLModel](https://sqlmodel.tiangolo.com/) - SQL databases in Python, designed for simplicity
+- [SQLAlchemy](https://www.sqlalchemy.org/) - SQL toolkit and ORM with full async support
+- [Pydantic](https://docs.pydantic.dev/) - Data validation using Python type annotations
 - [Alembic](https://alembic.sqlalchemy.org/) - Database migration tool
 - [Celery](https://docs.celeryproject.org/) - Distributed task queue
 - [Redis](https://redis.io/) - In-memory data structure store
@@ -301,7 +302,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📚 Additional Resources
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [SQLModel Documentation](https://sqlmodel.tiangolo.com/)
+- [SQLAlchemy Documentation](https://docs.sqlalchemy.org/)
+- [Pydantic Documentation](https://docs.pydantic.dev/)
 - [Docker Documentation](https://docs.docker.com/)
 - [PostgreSQL Documentation](https://www.postgresql.org/docs/)
 

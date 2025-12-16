@@ -32,7 +32,7 @@ User Request → Load Balancer → FastAPI App → Business Logic → Database
 
 - **FastAPI** - Modern, fast web framework for building APIs with Python
 - **Pydantic** - Data validation and settings management using Python type annotations
-- **SQLModel** - SQL databases in Python, designed for simplicity, compatibility, and robustness
+- **SQLAlchemy** - SQL toolkit and ORM with comprehensive async support
 
 ### Database & Storage
 
@@ -132,14 +132,14 @@ fastapi-base/
 3. **Route Resolution**: FastAPI routes the request to the appropriate endpoint
 4. **Dependency Injection**: FastAPI resolves dependencies (database session, authentication, etc.)
 5. **Business Logic**: Service layer handles the business logic
-6. **Data Access**: Models interact with the PostgreSQL database through SQLModel
+6. **Data Access**: SQLAlchemy models interact with the PostgreSQL database using async operations
 7. **Response Serialization**: Pydantic schemas serialize the response data
 8. **Response Return**: JSON response is returned to the client
 
 ### Database Operations
 
-1. **Connection Management**: Database connections are managed through SQLModel/SQLAlchemy
-2. **Query Execution**: Async queries are executed against PostgreSQL
+1. **Connection Management**: Database connections are managed through SQLAlchemy's async engine
+2. **Query Execution**: Async queries are executed against PostgreSQL using asyncpg
 3. **Transaction Handling**: Database transactions ensure data consistency
 4. **Migration Management**: Alembic handles database schema changes
 
